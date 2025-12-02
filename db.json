@@ -6,7 +6,9 @@
       "password": "admin123",
       "name": "Admin User",
       "role": "admin",
-      "createdAt": "2024-01-01"
+      "createdAt": "2024-01-01",
+      "updatedAt": null,
+      "isActive": true
     },
     {
       "id": 2,
@@ -14,16 +16,22 @@
       "password": "user123",
       "name": "Normal User",
       "role": "user",
-      "createdAt": "2024-01-01"
+      "createdAt": "2024-01-01",
+      "updatedAt": null,
+      "isActive": true
     },
     {
+      "id": 3,
       "email": "newuser@gmail.com",
       "password": "$2a$10$/A/NqqHuy8Mp6CbMMFUBTeusPAt..fxaww7kjJ1bN.2Qx1XKx01BW",
       "name": "New User",
       "role": "user",
-      "id": 3
+      "createdAt": "2024-12-02",
+      "updatedAt": null,
+      "isActive": true
     }
   ],
+
   "products": [
     {
       "id": 101,
@@ -31,9 +39,13 @@
       "price": 45000,
       "stock": 10,
       "category": "Electronics",
-      "createdBy": 1
+      "createdBy": 1,
+      "createdAt": "2024-01-01",
+      "updatedAt": null,
+      "isActive": true
     }
   ],
+
   "cart": [],
   "orders": [],
   "payments": [],
