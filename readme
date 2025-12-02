@@ -1,10 +1,1 @@
 this is a simple backend json server 
-
-
-to work on it 
-
-Start a codespace then run this command
-
-
-npm run setup
-

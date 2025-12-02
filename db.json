@@ -15,6 +15,13 @@
       "name": "Normal User",
       "role": "user",
       "createdAt": "2024-01-01"
+    },
+    {
+      "email": "newuser@gmail.com",
+      "password": "$2a$10$/A/NqqHuy8Mp6CbMMFUBTeusPAt..fxaww7kjJ1bN.2Qx1XKx01BW",
+      "name": "New User",
+      "role": "user",
+      "id": 3
     }
   ],
   "products": [
