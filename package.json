@@ -1,13 +1,19 @@
 {
   "name": "ecommerce-json-backend",
   "version": "1.0.0",
-  "description": "Ecommerce JSON backend with authentication",
+  "description": "Mock Ecommerce JSON backend with authentication and roles",
+  "main": "db.json",
   "scripts": {
-    "start": "json-server-auth db.json --routes routes.json --rules rules.json --host 0.0.0.0 --port 3000"
+    "setup": "npm install && npm start",
+    "start": "json-server-auth db.json --routes routes.json --rules rules.json --host 0.0.0.0 --port 3000",
+    "dev": "json-server-auth db.json --routes routes.json --rules rules.json --watch --host 0.0.0.0 --port 3000"
   },
   "dependencies": {
     "express": "^4.18.2",
     "json-server": "^0.17.4",
     "json-server-auth": "^2.1.0"
-  }
+  },
+  "keywords": ["json-server", "mock-api", "ecommerce", "backend"],
+  "author": "Arun",
+  "license": "MIT"
 }
