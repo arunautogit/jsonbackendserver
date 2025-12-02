@@ -6,14 +6,12 @@ const express = require("express");
 const app = jsonServer.create();
 const router = jsonServer.router("db.json");
 
-// Enable CORS
+// Middleware
 app.use(cors());
-
-// Body parsing
 app.use(express.json());
 app.use(jsonServer.bodyParser);
 
-// Logging middleware
+// Logging
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   console.log("Headers:", req.headers);
@@ -22,29 +20,28 @@ app.use((req, res, next) => {
   next();
 });
 
-// Load authentication rules
+// DB
+app.db = router.db;
+
+// AUTH RULES (✅ FIXED)
 const rules = auth.rewriter({
   users: 600,
   products: 444,
   cart: 600,
   orders: 600,
   payments: 600,
-  reviews: 400
+  reviews: 600,
+  login: 222,
+  register: 222
 });
 
-// Set DB
-app.db = router.db;
-
-// Apply rules BEFORE auth
 app.use(rules);
-
-// Auth middleware
 app.use(auth);
 
-// API route handler
+// API routing
 app.use("/api", router);
 
-// Start server
+// Start
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`✅ JSON Server running at http://localhost:${PORT}`);
