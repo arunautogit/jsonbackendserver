@@ -1,0 +1,10 @@
+{
+  "/api/login": "/login",
+  "/api/register": "/register",
+  "/api/users": "/users",
+  "/api/products": "/products",
+  "/api/cart": "/cart",
+  "/api/orders": "/orders",
+  "/api/payments": "/payments",
+  "/api/reviews": "/reviews"
+}
