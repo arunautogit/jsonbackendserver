@@ -1,1 +1,2 @@
 this is a simple backend json server 
+npm install express json-server json-server-auth cors && node server.js
