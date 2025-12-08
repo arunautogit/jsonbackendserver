@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword   # <-- change this to a strong password
+      POSTGRES_DB: ecommerce
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    image: login-backend
+    depends_on:
+      - db
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgrespassword   # <-- keep same as above
+      DATABASE_NAME: ecommerce
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/usr/src/app
+      - ./public:/usr/src/app/public
+    command: ["node", "server.js"]
+
+volumes:
+  db-data:
