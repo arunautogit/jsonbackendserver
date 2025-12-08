@@ -5,7 +5,23 @@ import './index.css';
 import { teamColors, teamLogos } from './data/players';
 
 // Connect to Server
-const socket = io.connect("http://localhost:3001");
+// Dynamic URL handling for Local vs GitHub Codespaces
+const getSocketUrl = () => {
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+
+  if (hostname.includes('github.dev') || hostname.includes('gitpod.io')) {
+    // Cloud IDEs (GitHub Codespaces) use formatted URLs like 'app-5173.github.dev'
+    // We assume the server is on port 3001, so we replace the client port 5173 with 3001
+    // Note: You must ensure Port 3001 is "Public" or "Forwarded" in Codespaces ports tab
+    return `${protocol}//${hostname.replace('-5173', '-3001')}`;
+  }
+
+  // Fallback for local network (e.g. 192.168.x.x:3001)
+  return `${protocol}//${hostname}:3001`;
+};
+
+const socket = io.connect(getSocketUrl());
 
 function App() {
   const [gameState, setGameState] = useState('LOBBY'); // LOBBY, WAITING, PLAYING...
