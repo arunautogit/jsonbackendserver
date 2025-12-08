@@ -11,13 +11,12 @@ const getSocketUrl = () => {
   const hostname = window.location.hostname;
 
   if (hostname.includes('github.dev') || hostname.includes('gitpod.io')) {
-    // Cloud IDEs (GitHub Codespaces) use formatted URLs like 'app-5173.github.dev'
-    // We assume the server is on port 3001, so we replace the client port 5173 with 3001
-    // Note: You must ensure Port 3001 is "Public" or "Forwarded" in Codespaces ports tab
+    // Cloud IDEs (GitHub Codespaces)
+    // Ensure Port 3001 is set to PUBLIC in Ports tab
     return `${protocol}//${hostname.replace('-5173', '-3001')}`;
   }
 
-  // Fallback for local network (e.g. 192.168.x.x:3001)
+  // Fallback for local network
   return `${protocol}//${hostname}:3001`;
 };
 
@@ -31,12 +30,24 @@ function App() {
   const [myIndex, setMyIndex] = useState(null);
   const [availableRooms, setAvailableRooms] = useState([]);
 
+  // Debug State
+  const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [socketUrl, setSocketUrl] = useState(getSocketUrl());
+
   // Server Game State
   const [serverState, setServerState] = useState(null);
 
   const playerRefs = useRef([]);
 
   useEffect(() => {
+    // Debug Listeners
+    socket.on('connect', () => setConnectionStatus('Connected'));
+    socket.on('disconnect', () => setConnectionStatus('Disconnected'));
+    socket.on('connect_error', (err) => {
+      setConnectionStatus(`Error: ${err.message}`);
+      console.error("Socket Error:", err);
+    });
+
     socket.on('room_created', (id) => {
       setRoomId(id);
       setGameState('WAITING');
@@ -64,6 +75,9 @@ function App() {
 
     // Initial fetch
     socket.emit('get_rooms');
+
+    // Check connection immediately
+    if (socket.connected) setConnectionStatus('Connected');
   }, []);
 
   const createRoom = () => {
@@ -93,10 +107,14 @@ function App() {
       <div className="lobby">
         <h1>IPL Multiplayer</h1>
 
-        <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
-          Status: <span style={{ color: connectionStatus === 'Connected' ? 'lightgreen' : 'red' }}>{connectionStatus}</span>
-          <br />
-          Server: {socketUrl}
+        <div style={{ fontSize: '13px', color: '#ccc', marginBottom: '20px', padding: '10px', background: '#222', borderRadius: '5px' }}>
+          <p style={{ margin: '2px 0' }}><strong>Status:</strong> <span style={{ color: connectionStatus === 'Connected' ? 'lightgreen' : 'red', fontWeight: 'bold' }}>{connectionStatus}</span></p>
+          <p style={{ margin: '2px 0' }}><strong>Server:</strong> {socketUrl}</p>
+          {connectionStatus !== 'Connected' && (
+            <p style={{ color: 'orange', fontSize: '11px', marginTop: '5px' }}>
+              Codespaces Note: Ensure Port 3001 is <strong>PUBLIC</strong> in Ports tab.
+            </p>
+          )}
         </div>
 
         <div className="setup-container">
