@@ -92,6 +92,13 @@ function App() {
     return (
       <div className="lobby">
         <h1>IPL Multiplayer</h1>
+
+        <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+          Status: <span style={{ color: connectionStatus === 'Connected' ? 'lightgreen' : 'red' }}>{connectionStatus}</span>
+          <br />
+          Server: {socketUrl}
+        </div>
+
         <div className="setup-container">
           <div className="actions-row">
             <button onClick={createRoom} className="primary-btn">Create New Room</button>
