@@ -3,7 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { createRoom, joinRoom, startGame, getRoom, leaveRoom, rooms, addCpu } from './roomManager.js';
-import { playTurn, processNextTurn, getBestAttribute, handlePlayerDrop, handleStealMove } from './gameLogic.js';
+import { playTurn, processNextTurn, getBestAttribute, handlePlayerDrop, handleStealMove, activateSpyMode } from './gameLogic.js';
 
 const app = express();
 app.use(cors());
@@ -107,6 +107,17 @@ io.on('connection', (socket) => {
         } catch (err) {
             console.error(`[DEBUG] Error in start_game: ${err.message}`);
             console.error(err);
+        }
+    });
+
+    socket.on('activate_spy', ({ roomId }) => {
+        const room = getRoom(roomId);
+        if (room && room.game) {
+            const playerIndex = room.players.indexOf(socket.id);
+            if (playerIndex !== -1) {
+                activateSpyMode(room.game, playerIndex);
+                io.to(roomId).emit('game_update', room.game);
+            }
         }
     });
 

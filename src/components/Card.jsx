@@ -1,12 +1,13 @@
 import React from 'react';
 import './Card.css';
 
-const Card = ({ player, isVisible, isActive, onSelectAttribute, disabled, teamColor }) => {
+const Card = ({ player, isVisible, isActive, onSelectAttribute, disabled, teamColor, isSpyCard }) => {
     if (!player) return <div className="card-placeholder"></div>;
 
     return (
         <div
             className={`card ${isVisible ? 'visible' : 'hidden'} ${isActive ? 'active' : ''}`}
+            style={isSpyCard ? { border: '2px solid gold', boxShadow: '0 0 15px gold' } : {}}
         >
             <div className="card-back">
                 <div className="logo">IPL CARD GAME</div>
@@ -14,6 +15,7 @@ const Card = ({ player, isVisible, isActive, onSelectAttribute, disabled, teamCo
             <div className="card-front" style={{ background: teamColor }}>
                 <div className="card-header">
                     <span className="rank">#{player.id}</span>
+                    {isSpyCard && <span style={{ fontSize: '1.2em' }}>🕵️</span>}
                     <span className="team">{player.team.split(' ').map(w => w[0]).join('')}</span>
                 </div>
                 <div className="card-image-container">

@@ -62,8 +62,28 @@ export const initializeGame = (playerCount, playerNames = []) => {
         diceValue: 1,
         diceResult: null,
         transferState: { active: false, from: null, to: null, count: 0 },
-        stealState: { active: false, stealer: null, count: 0 }
+        stealState: { active: false, stealer: null, count: 0 },
+        spyState: { active: false, makerIndex: null, cardId: null, holderIndex: null }
     };
+};
+
+const updateSpyHolder = (game) => {
+    if (!game.spyState.active || !game.spyState.cardId) return;
+
+    // Find who holds the spy card
+    let holder = null;
+    game.hands.forEach((hand, idx) => {
+        if (hand.some(c => c.id === game.spyState.cardId)) {
+            holder = idx;
+        }
+    });
+
+    if (holder !== null) {
+        game.spyState.holderIndex = holder;
+    } else {
+        // Card might be in pot or lost (shouldn't happen easily)
+        game.spyState.holderIndex = null;
+    }
 };
 
 export const processNextTurn = (game) => {
@@ -136,6 +156,14 @@ export const processNextTurn = (game) => {
     game.round += 1;
     game.revealed = false;
     game.lastResult = null;
+
+    // Spy Logic: Check for holder update (if active)
+    if (game.spyState.active) {
+        updateSpyHolder(game);
+    }
+
+    // Update Spy Holder Position
+    updateSpyHolder(game);
 
     return game;
 };
@@ -225,5 +253,23 @@ export const handleStealMove = (game, { targetIndex, cardIndices }) => {
 
     game.feedback = `${game.playerNames[stealer] || `Player ${stealer + 1}`} stole ${stolenCards.length} cards from ${game.playerNames[targetIndex] || `Player ${targetIndex + 1}`}!`;
 
+    return game;
+};
+
+export const activateSpyMode = (game, playerIndex) => {
+    if (game.spyState.active) return game;
+
+    // Validate trigger condition again (25 cards)
+    if (game.hands[playerIndex].length < 25) return game;
+
+    game.spyState.active = true;
+    game.spyState.makerIndex = playerIndex;
+
+    // Mark the top card
+    if (game.hands[playerIndex].length > 0) {
+        game.spyState.cardId = game.hands[playerIndex][0].id;
+        game.spyState.holderIndex = playerIndex;
+        game.feedback = `${game.playerNames[playerIndex] || `Player ${playerIndex + 1}`} activated Spy Mode! 🕵️`;
+    }
     return game;
 };
