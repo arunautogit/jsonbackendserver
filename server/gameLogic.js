@@ -135,3 +135,17 @@ export const processNextTurn = (game) => {
 
     return game;
 };
+
+export const getBestAttribute = (card) => {
+    // Simple logic: pick highest stat
+    const stats = card.stats;
+    let maxVal = -1;
+    let bestAttr = 'matches'; // default
+    for (const [attr, val] of Object.entries(stats)) {
+        if (typeof val === 'number' && val > maxVal) {
+            maxVal = val;
+            bestAttr = attr;
+        }
+    }
+    return bestAttr;
+};

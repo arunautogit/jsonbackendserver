@@ -106,140 +106,137 @@ select {
   height: 80vh;
 }
 
-/* Game Board */
+/* Game Board / Battle Arena */
 .game-board {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  height: 95vh;
+  justify-content: space-between;
+  width: 100%;
 }
 
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #1e1e1e;
-  padding: 15px 30px;
+  background: rgba(30, 30, 30, 0.9);
+  padding: 10px 20px;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  max-height: 60px;
 }
 
-.info {
-  font-size: 1.2em;
-  font-weight: bold;
-}
-
-.scores {
+.battle-arena {
+  position: relative;
+  flex: 1;
   display: flex;
-  gap: 20px;
-  font-size: 1.1em;
-}
-
-.active-score {
-  color: #ffca28;
-  font-weight: bold;
-  border-bottom: 2px solid #ffca28;
-}
-
-.message-area {
-  font-size: 1.5em;
-  height: 40px;
-  color: #ffca28;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.cards-area {
-  display: flex;
-  flex-wrap: wrap;
   justify-content: center;
-  gap: 20px;
-  min-height: 500px;
+  align-items: center;
+  width: 100%;
+  overflow: hidden;
+  /* Perspective for 3D feel */
+  perspective: 1000px;
 }
 
-.player-slot {
+/* Player Positions */
+.player-position {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
+  transition: all 0.5s ease;
 }
 
-.player-label {
-  margin-bottom: 10px;
-  font-weight: bold;
-  color: #aaa;
+.player-position .card {
+  /* Scale down opponents slightly */
+  transform: scale(0.8);
+  margin: 0;
 }
 
-.actions {
-  margin-top: 20px;
+.player-position.bottom .card {
+  /* Main player normal size */
+  transform: scale(1);
 }
 
-.next-turn-btn {
-  background: #2196f3;
-  font-size: 1.2em;
-  padding: 10px 30px;
+/* Specific Spots */
+.player-position.bottom {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
 }
 
-.next-turn-btn:hover {
-  background: #1976d2;
+.player-position.top {
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
 }
 
-/* Responsive */
+.player-position.left {
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+}
+
+.player-position.right {
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+}
+
+/* Responsive Mobile adjustments */
 @media (max-width: 768px) {
-  .card {
-    width: 155px;
-    /* Fits 2 on typical 360px+ screens */
-    height: 280px;
-    font-size: 0.8em;
-    padding: 1rem;
-    margin: 5px;
-  }
-
-  .card-back {
-    font-size: 14px;
-  }
-
-  /* Adjust stats for small cards */
-  .stat-row {
-    padding: 3px 6px;
-    font-size: 10px;
-    margin-bottom: 2px;
-  }
-
-  .player-image {
-    height: 60%;
-    /* Ensure image doesn't take too much space */
-  }
-
-  .player-name {
-    font-size: 12px;
-    padding: 4px;
-  }
-
-  h1 {
-    font-size: 1.8em;
-    margin-bottom: 10px;
-  }
-
   .game-board {
-    gap: 10px;
-  }
-
-  .cards-area {
-    gap: 5px;
-    justify-content: center;
+    height: 100vh;
   }
 
   header {
     flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    padding: 5px;
+    font-size: 0.8rem;
+    max-height: 80px;
   }
 
-  .info,
-  .scores {
-    font-size: 0.9em;
+  .player-position.bottom {
+    bottom: 0px;
   }
 
-  .next-turn-btn {
-    padding: 8px 20px;
-    font-size: 1em;
+  /* In mobile, Left/Right might be squashed. 
+     Prefer Top/Bottom primarily for 2 players.
+     For 4 players, maybe scale down more.
+  */
+
+  .player-position .card {
+    /* Mobile card size overrides from Card.css might apply contextually,
+         but we force scale here to fit arena */
+    transform: scale(0.65);
   }
+
+  .player-position.bottom .card {
+    transform: scale(0.75);
+  }
+
+  .player-position.left {
+    left: -10px;
+  }
+
+  .player-position.right {
+    right: -10px;
+  }
+}
+
+.message-area {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  padding: 20px;
+  border-radius: 10px;
+  z-index: 50;
+  text-align: center;
 }

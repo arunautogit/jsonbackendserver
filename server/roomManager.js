@@ -7,7 +7,8 @@ export const createRoom = (hostSocketId) => {
     rooms[roomId] = {
         players: [hostSocketId],
         game: null,
-        status: 'LOBBY'
+        status: 'LOBBY',
+        createdAt: Date.now()
     };
     return roomId;
 };
@@ -21,10 +22,21 @@ export const joinRoom = (roomId, socketId) => {
     return false;
 };
 
+export const addCpu = (roomId) => {
+    const room = rooms[roomId];
+    if (room && room.status === 'LOBBY' && room.players.length < 4) {
+        const cpuId = `CPU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        room.players.push(cpuId);
+        return true;
+    }
+    return false;
+};
+
 export const startGame = (roomId) => {
     const room = rooms[roomId];
     if (room) {
         room.game = initializeGame(room.players.length);
+        room.game.playerIds = [...room.players]; // Store IDs to identifying CPUs
         room.status = 'PLAYING';
         return room.game;
     }

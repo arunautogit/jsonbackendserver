@@ -48,6 +48,8 @@ function App() {
 
   const playerRefs = useRef([]);
 
+  const [showCpuPrompt, setShowCpuPrompt] = useState(false);
+
   useEffect(() => {
     // Debug Listeners
     socket.on('connect', () => setConnectionStatus('Connected'));
@@ -70,6 +72,7 @@ function App() {
     socket.on('game_started', (game) => {
       setServerState(game);
       setGameState('PLAYING');
+      setShowCpuPrompt(false);
     });
 
     socket.on('game_update', (game) => {
@@ -78,6 +81,10 @@ function App() {
 
     socket.on('rooms_list', (rooms) => {
       setAvailableRooms(rooms);
+    });
+
+    socket.on('suggest_cpu', () => {
+      setShowCpuPrompt(true);
     });
 
     socket.on('error', (msg) => alert(msg));
@@ -99,7 +106,17 @@ function App() {
       socket.emit('join_room', roomToJoin);
       setRoomId(roomToJoin);
       setGameState('WAITING');
+      // We don't know myIndex yet until game starts or we ask, 
+      // but strictly we can infer from connection order or just wait for game start
+      // For now, only Host knows he is host (index 0 usually). 
+      // Actually, myIndex isn't strictly set for joiners in Lobby.
+      // We need to set myIndex when game starts.
     }
+  };
+
+  const addCpu = () => {
+    if (roomId) socket.emit('add_cpu', roomId);
+    setShowCpuPrompt(false);
   };
 
   const startGame = () => {
@@ -113,6 +130,49 @@ function App() {
 
   const handleNextTurn = () => {
     if (roomId) socket.emit('next_turn', roomId);
+  };
+
+  // Determine My Index correctly on Game Start if not set
+  useEffect(() => {
+    if (serverState && serverState.playerIds && socket.id) {
+      const idx = serverState.playerIds.indexOf(socket.id);
+      if (idx !== -1 && myIndex !== idx) {
+        setMyIndex(idx);
+        console.log("Set My Index to:", idx);
+      }
+    }
+  }, [serverState, socket.id, myIndex]);
+
+  // Helper to calculate position class
+  const getPositionClass = (index, totalPlayers) => {
+    // If we don't know myIndex, assume we are P0 (or spectator view)
+    const pivot = myIndex !== null ? myIndex : 0;
+
+    // Calculate relative index (0 to total-1)
+    // relative 0 = Me (Bottom)
+    // relative 1 = Right (if 4) or Top (if 2)
+
+    let relative = (index - pivot + totalPlayers) % totalPlayers;
+
+    if (totalPlayers === 2) {
+      if (relative === 0) return 'bottom';
+      return 'top';
+    }
+
+    if (totalPlayers === 3) {
+      if (relative === 0) return 'bottom';
+      if (relative === 1) return 'right'; // or top-right
+      return 'left';
+    }
+
+    if (totalPlayers >= 4) {
+      if (relative === 0) return 'bottom';
+      if (relative === 1) return 'left';
+      if (relative === 2) return 'top';
+      if (relative === 3) return 'right';
+    }
+
+    return 'bottom';
   };
 
   // RENDER LOGIC
@@ -164,6 +224,19 @@ function App() {
       <div className="lobby">
         <h1>Room: {roomId}</h1>
         <p>Players Connected: {playerCount}</p>
+
+        {showCpuPrompt && (
+          <div style={{ background: '#444', padding: '10px', borderRadius: '5px', marginBottom: '10px' }}>
+            <p>Waiting for a while? Add a CPU?</p>
+            <button onClick={addCpu} style={{ background: '#ff9800' }}>Add CPU Player</button>
+          </div>
+        )}
+
+        {/* Helper for testing CPU immediately */}
+        <div style={{ marginTop: '20px', fontSize: '0.8em' }}>
+          <button onClick={addCpu} style={{ background: '#555', padding: '5px' }}>+ CPU (Debug)</button>
+        </div>
+
         {myIndex === 0 && <button onClick={startGame}>Start Game</button>}
         {myIndex !== 0 && <p>Waiting for Host to start...</p>}
       </div>
@@ -187,28 +260,34 @@ function App() {
         </div>
       </header>
 
-      <div className="message-area">
-        {feedback}
-        {revealed && (
-          <div style={{ marginTop: '10px' }}>
-            <button className="next-turn-btn" onClick={handleNextTurn}>Next Turn ➡️</button>
-          </div>
-        )}
-      </div>
+      <div className="battle-arena">
+        <div className="message-area">
+          {feedback}
+          {revealed && (
+            <div style={{ marginTop: '10px' }}>
+              <button className="next-turn-btn" onClick={handleNextTurn}>Next Turn ➡️</button>
+            </div>
+          )}
+        </div>
 
-      <div className="cards-area">
         {hands.map((hand, index) => {
-          if (hand.length === 0) return null;
+          if (hand.length === 0) return null; // Or show empty slot?
+
+          const posClass = getPositionClass(index, hands.length); // Assuming standard 4 slots or dynamic?
+          // Hands length is constant usually (e.g. 2 or 4) if initialized.
+          // But if players drop, we might need robust count.
 
           return (
-            <div key={index} className="player-slot">
+            <div key={index} className={`player-position ${posClass}`}>
               <div className="player-label">P{index + 1} ({hand.length})</div>
               <Card
                 player={hand[0]}
-                isVisible={revealed || (index === activePlayerIndex)}
+                isVisible={revealed || (index === activePlayerIndex) || (index === myIndex)} // Show my card always? Usually yes.
                 isActive={index === activePlayerIndex}
                 onSelectAttribute={(attr) => {
-                  if (activePlayerIndex === index) {
+                  if (activePlayerIndex === index) { // Only if active
+                    // And if it is MY turn (check myIndex)
+                    // For now we allow hotseat moves if myIndex is not strictly enforced
                     sendMove(attr);
                   }
                 }}
