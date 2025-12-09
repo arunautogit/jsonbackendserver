@@ -7,17 +7,26 @@ import { teamColors, teamLogos } from './data/players';
 // Connect to Server
 // Dynamic URL handling for Local vs GitHub Codespaces
 const getSocketUrl = () => {
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
+  // If running in a codespace or similar cloud/proxy env
+  if (typeof window !== 'undefined' && window.location) {
+    const { protocol, hostname, port } = window.location;
 
-  if (hostname.includes('github.dev') || hostname.includes('gitpod.io')) {
-    // Cloud IDEs (GitHub Codespaces)
-    // Ensure Port 3001 is set to PUBLIC in Ports tab
-    return `${protocol}//${hostname.replace('-5173', '-3001')}`;
+    // If we are on a standard localhost with port (e.g. localhost:5173)
+    // We want to target localhost:3001
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:3001`;
+    }
+
+    // If we are on codespaces (e.g. fuzzy-space-waffle-5173.github.dev)
+    // We typically want fuzzy-space-waffle-3001.github.dev
+    // We can attempt to replace the port number in the hostname if present
+    if (hostname.includes('-5173')) {
+      return `${protocol}//${hostname.replace('-5173', '-3001')}`;
+    }
   }
 
-  // Fallback for local network
-  return `${protocol}//${hostname}:3001`;
+  // Fallback
+  return `http://localhost:3001`;
 };
 
 const socket = io.connect(getSocketUrl());
@@ -97,8 +106,13 @@ function App() {
     if (roomId) socket.emit('start_game', roomId);
   };
 
+
   const sendMove = (attribute) => {
     if (roomId) socket.emit('make_move', { roomId, attribute });
+  };
+
+  const handleNextTurn = () => {
+    if (roomId) socket.emit('next_turn', roomId);
   };
 
   // RENDER LOGIC
@@ -173,7 +187,14 @@ function App() {
         </div>
       </header>
 
-      <div className="message-area">{feedback}</div>
+      <div className="message-area">
+        {feedback}
+        {revealed && (
+          <div style={{ marginTop: '10px' }}>
+            <button className="next-turn-btn" onClick={handleNextTurn}>Next Turn ➡️</button>
+          </div>
+        )}
+      </div>
 
       <div className="cards-area">
         {hands.map((hand, index) => {

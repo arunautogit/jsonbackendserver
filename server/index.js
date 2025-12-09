@@ -3,7 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { createRoom, joinRoom, startGame, getRoom, leaveRoom, rooms } from './roomManager.js';
-import { playTurn } from './gameLogic.js';
+import { playTurn, processNextTurn } from './gameLogic.js';
 
 const app = express();
 app.use(cors());
@@ -69,6 +69,9 @@ io.on('connection', (socket) => {
         const room = getRoom(roomId);
         if (room && room.game) {
             const g = room.game;
+            // Only allow move if not already revealed
+            if (g.revealed) return;
+
             const participatingIndices = g.hands.map((_, i) => i).filter(i => g.hands[i].length > 0);
             const activeCardsMap = participatingIndices.map(index => ({
                 playerIndex: index,
@@ -79,6 +82,18 @@ io.on('connection', (socket) => {
             g.revealed = true;
             g.lastResult = result;
 
+            io.to(roomId).emit('game_update', g);
+        }
+    });
+
+    socket.on('next_turn', (roomId) => {
+        const room = getRoom(roomId);
+        if (room && room.game) {
+            const g = room.game;
+            // Only process if revealed
+            if (!g.revealed) return;
+
+            processNextTurn(g);
             io.to(roomId).emit('game_update', g);
         }
     });

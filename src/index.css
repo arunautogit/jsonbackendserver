@@ -184,29 +184,62 @@ header {
 /* Responsive */
 @media (max-width: 768px) {
   .card {
-    width: 200px;
-    height: 350px;
+    width: 155px;
+    /* Fits 2 on typical 360px+ screens */
+    height: 280px;
+    font-size: 0.8em;
+    padding: 1rem;
+    margin: 5px;
   }
 
   .card-back {
-    font-size: 18px;
+    font-size: 14px;
   }
 
+  /* Adjust stats for small cards */
   .stat-row {
-    padding: 4px 8px;
+    padding: 3px 6px;
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+
+  .player-image {
+    height: 60%;
+    /* Ensure image doesn't take too much space */
+  }
+
+  .player-name {
     font-size: 12px;
+    padding: 4px;
   }
 
   h1 {
-    font-size: 2em;
+    font-size: 1.8em;
+    margin-bottom: 10px;
+  }
+
+  .game-board {
+    gap: 10px;
   }
 
   .cards-area {
-    gap: 10px;
+    gap: 5px;
+    justify-content: center;
   }
 
   header {
     flex-direction: column;
     gap: 10px;
+    padding: 10px;
+  }
+
+  .info,
+  .scores {
+    font-size: 0.9em;
+  }
+
+  .next-turn-btn {
+    padding: 8px 20px;
+    font-size: 1em;
   }
 }
