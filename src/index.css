@@ -201,31 +201,43 @@ header {
     max-height: 80px;
   }
 
+  /* Specific Spots Adjustment */
   .player-position.bottom {
     bottom: 0px;
+    z-index: 20;
+    /* Ensure player is on top of everything */
   }
 
-  /* In mobile, Left/Right might be squashed. 
-     Prefer Top/Bottom primarily for 2 players.
-     For 4 players, maybe scale down more.
-  */
+  .player-position.top {
+    top: 5px;
+  }
 
+  /* Force opponents to be very small and unobtrusive */
   .player-position .card {
-    /* Mobile card size overrides from Card.css might apply contextually,
-         but we force scale here to fit arena */
-    transform: scale(0.65);
+    transform: scale(0.4);
+    /* Very small for opponents */
+    margin: -80px;
+    /* Reduce effective footprint/margin to crowd them if needed */
   }
 
+  /* Main Player - Big and Readable */
   .player-position.bottom .card {
-    transform: scale(0.75);
+    transform: scale(0.9);
+    /* Almost full size */
+    margin: 0;
   }
 
+  /* Adjust side players to not overlap main player too much */
   .player-position.left {
-    left: -10px;
+    left: -20px;
+    top: 30%;
+    /* Move up a bit */
   }
 
   .player-position.right {
-    right: -10px;
+    right: -20px;
+    top: 30%;
+    /* Move up a bit */
   }
 }
 
