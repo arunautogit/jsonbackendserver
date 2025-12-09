@@ -2,10 +2,11 @@ import { initializeGame, playTurn } from './gameLogic.js';
 
 export const rooms = {}; // { roomId: { players: [socketIds], game: gameState } }
 
-export const createRoom = (hostSocketId) => {
+export const createRoom = (hostSocketId, playerName) => {
     const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
     rooms[roomId] = {
         players: [hostSocketId],
+        playerNames: { [hostSocketId]: playerName || 'Player 1' },
         game: null,
         status: 'LOBBY',
         createdAt: Date.now()
@@ -13,10 +14,11 @@ export const createRoom = (hostSocketId) => {
     return roomId;
 };
 
-export const joinRoom = (roomId, socketId) => {
+export const joinRoom = (roomId, socketId, playerName) => {
     const room = rooms[roomId];
     if (room && room.status === 'LOBBY' && room.players.length < 4) {
         room.players.push(socketId);
+        room.playerNames[socketId] = playerName || `Player ${room.players.length}`;
         return true;
     }
     return false;
@@ -27,6 +29,7 @@ export const addCpu = (roomId) => {
     if (room && room.status === 'LOBBY' && room.players.length < 4) {
         const cpuId = `CPU-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         room.players.push(cpuId);
+        room.playerNames[cpuId] = `CPU ${room.players.length}`;
         return true;
     }
     return false;
@@ -35,7 +38,9 @@ export const addCpu = (roomId) => {
 export const startGame = (roomId) => {
     const room = rooms[roomId];
     if (room) {
-        room.game = initializeGame(room.players.length);
+        // Create ordered list of names based on players array order
+        const namesList = room.players.map(id => room.playerNames[id]);
+        room.game = initializeGame(room.players.length, namesList);
         room.game.playerIds = [...room.players]; // Store IDs to identifying CPUs
         room.status = 'PLAYING';
         return room.game;

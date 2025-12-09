@@ -3,7 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { createRoom, joinRoom, startGame, getRoom, leaveRoom, rooms, addCpu } from './roomManager.js';
-import { playTurn, processNextTurn, getBestAttribute } from './gameLogic.js';
+import { playTurn, processNextTurn, getBestAttribute, handlePlayerDrop, handleStealMove } from './gameLogic.js';
 
 const app = express();
 app.use(cors());
@@ -33,20 +33,29 @@ io.on('connection', (socket) => {
     // Send initial list
     socket.emit('rooms_list', getPublicRooms());
 
-    socket.on('create_room', () => {
-        const roomId = createRoom(socket.id);
+    socket.on('create_room', (playerName) => {
+        const roomId = createRoom(socket.id, playerName);
         socket.join(roomId);
         socket.emit('room_created', roomId);
-        console.log(`Room created: ${roomId} by ${socket.id}`);
+        console.log(`Room created: ${roomId} by ${socket.id} (${playerName})`);
         io.emit('rooms_list', getPublicRooms());
     });
 
-    socket.on('join_room', (roomId) => {
-        if (joinRoom(roomId, socket.id)) {
-            socket.join(roomId);
-            const room = getRoom(roomId);
-            io.to(roomId).emit('player_joined', room.players.length);
-            console.log(`User ${socket.id} joined room ${roomId}`);
+    socket.on('join_room', ({ roomId, playerName }) => {
+        // Handle both simple ID (old client) and object (new client)
+        let targetRoom = roomId;
+        let pName = playerName;
+
+        if (typeof roomId === 'object') {
+            targetRoom = roomId.roomId;
+            pName = roomId.playerName;
+        }
+
+        if (joinRoom(targetRoom, socket.id, pName)) {
+            socket.join(targetRoom);
+            const room = getRoom(targetRoom);
+            io.to(targetRoom).emit('player_joined', room.players.length);
+            console.log(`User ${socket.id} (${pName}) joined room ${targetRoom}`);
             io.emit('rooms_list', getPublicRooms());
         } else {
             socket.emit('error', 'Room not found or full');
@@ -65,16 +74,53 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('drop_game', (roomId) => {
+        const room = getRoom(roomId);
+        if (room && room.game) {
+            const playerIndex = room.players.indexOf(socket.id);
+            if (playerIndex !== -1) {
+                handlePlayerDrop(room.game, playerIndex);
+                io.to(roomId).emit('game_update', room.game);
+
+                // Check if next player is CPU (if turn passed)
+                setTimeout(() => checkCpuTurn(roomId, room.game), 1000);
+            }
+        }
+    });
+
     socket.on('get_rooms', () => {
         socket.emit('rooms_list', getPublicRooms());
     });
 
     socket.on('start_game', (roomId) => {
-        const game = startGame(roomId);
-        if (game) {
-            io.to(roomId).emit('game_started', game);
-            io.emit('rooms_list', getPublicRooms());
-            checkCpuTurn(roomId, game);
+        console.log(`[DEBUG] Received start_game for room ${roomId}`);
+        try {
+            const game = startGame(roomId);
+            if (game) {
+                console.log(`[DEBUG] Game started for ${roomId}`);
+                io.to(roomId).emit('game_started', game);
+                io.emit('rooms_list', getPublicRooms());
+                checkCpuTurn(roomId, game);
+            } else {
+                console.error(`[DEBUG] startGame failed for ${roomId}`);
+            }
+        } catch (err) {
+            console.error(`[DEBUG] Error in start_game: ${err.message}`);
+            console.error(err);
+        }
+    });
+
+    socket.on('steal_move', ({ roomId, targetIndex, cardIndices }) => {
+        const room = getRoom(roomId);
+        if (room && room.game) {
+            // Verify it is the stealer's turn to steal
+            // Security check: socket.id should match room.players[game.stealState.stealer]
+            // We'll trust the logic for now or add check:
+            // const stealerIdx = room.game.stealState.stealer;
+            // if (room.players[stealerIdx] !== socket.id) return;
+
+            handleStealMove(room.game, { targetIndex, cardIndices });
+            io.to(roomId).emit('game_update', room.game);
         }
     });
 

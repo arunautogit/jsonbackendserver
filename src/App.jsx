@@ -29,6 +29,44 @@ const getSocketUrl = () => {
   return `http://localhost:3001`;
 };
 
+// Simple Modal Component
+const NameInputModal = ({ onConfirm }) => {
+  const [name, setName] = useState('');
+  return (
+    <div className="modal-overlay" style={{
+      position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+      background: 'rgba(0,0,0,0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000
+    }}>
+      <div className="modal-content" style={{
+        background: '#333', padding: '40px', borderRadius: '15px', textAlign: 'center', border: '1px solid #555',
+        boxShadow: '0 0 20px rgba(0,0,0,0.5)', maxWidth: '90%'
+      }}>
+        <h2 style={{ color: '#fff', marginBottom: '20px' }}>Enter Your Name</h2>
+        <input
+          autoFocus
+          placeholder="Player Name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onConfirm(name); }}
+          style={{
+            padding: '15px', fontSize: '1.2em', textAlign: 'center',
+            width: '100%', marginBottom: '20px', borderRadius: '8px', border: 'none', background: '#222', color: 'white'
+          }}
+        />
+        <button
+          onClick={() => { if (name.trim()) onConfirm(name); }}
+          disabled={!name.trim()}
+          style={{
+            padding: '12px 30px', fontSize: '1.1em', background: '#ff5722', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer'
+          }}
+        >
+          Enter Game 🚀
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const socket = io.connect(getSocketUrl());
 
 function App() {
@@ -48,7 +86,14 @@ function App() {
 
   const playerRefs = useRef([]);
 
+  const [playerName, setPlayerName] = useState('');
+  const [nameConfirmed, setNameConfirmed] = useState(false);
   const [showCpuPrompt, setShowCpuPrompt] = useState(false);
+
+  // Steal Logic State
+  const [stealTarget, setStealTarget] = useState(null);
+  const [stealSelection, setStealSelection] = useState([]);
+  const [isTransferring, setIsTransferring] = useState(false);
 
   useEffect(() => {
     // Debug Listeners
@@ -70,6 +115,7 @@ function App() {
     });
 
     socket.on('game_started', (game) => {
+      console.log("[CLIENT] Received game_started", game);
       setServerState(game);
       setGameState('PLAYING');
       setShowCpuPrompt(false);
@@ -97,26 +143,34 @@ function App() {
   }, []);
 
   const createRoom = () => {
-    socket.emit('create_room');
+    if (!playerName) return alert("Enter Name!");
+    socket.emit('create_room', playerName);
   };
 
   const joinRoom = (id) => {
+    if (!playerName) return alert("Enter Name!");
     const roomToJoin = id || inputRoom;
     if (roomToJoin !== "") {
-      socket.emit('join_room', roomToJoin);
+      socket.emit('join_room', { roomId: roomToJoin, playerName });
       setRoomId(roomToJoin);
       setGameState('WAITING');
-      // We don't know myIndex yet until game starts or we ask, 
-      // but strictly we can infer from connection order or just wait for game start
-      // For now, only Host knows he is host (index 0 usually). 
-      // Actually, myIndex isn't strictly set for joiners in Lobby.
-      // We need to set myIndex when game starts.
     }
   };
 
   const addCpu = () => {
     if (roomId) socket.emit('add_cpu', roomId);
     setShowCpuPrompt(false);
+  };
+
+  const dropGame = () => {
+    if (confirm("Drop game? Cards will be distributed.")) {
+      socket.emit('drop_game', roomId);
+      setGameState('LOBBY');
+      setServerState(null);
+      setPlayerCount(0);
+      setMyIndex(null);
+      setRoomId('');
+    }
   };
 
   const startGame = () => {
@@ -142,6 +196,14 @@ function App() {
       }
     }
   }, [serverState, socket.id, myIndex]);
+
+  // Reset local steal state if server steal state clears (and not transferring)
+  useEffect(() => {
+    if (!serverState?.stealState?.active && !isTransferring) {
+      setStealTarget(null);
+      setStealSelection([]);
+    }
+  }, [serverState?.stealState?.active, isTransferring]);
 
   // Helper to calculate position class
   const getPositionClass = (index, totalPlayers) => {
@@ -181,12 +243,21 @@ function App() {
       <div className="lobby">
         <h1>IPL Multiplayer</h1>
 
-        <div style={{ fontSize: '13px', color: '#ccc', marginBottom: '20px', padding: '10px', background: '#222', borderRadius: '5px' }}>
+        {!nameConfirmed && (
+          <NameInputModal onConfirm={(name) => {
+            setPlayerName(name);
+            setNameConfirmed(true);
+          }} />
+        )}
+
+        {nameConfirmed && <h2 style={{ color: '#aaa', marginTop: '-10px' }}>Welcome, {playerName}</h2>}
+
+        <div style={{ fontSize: '13px', color: '#ccc', marginBottom: '20px', padding: '10px', background: '#222', borderRadius: '5px', marginTop: '20px' }}>
           <p style={{ margin: '2px 0' }}><strong>Status:</strong> <span style={{ color: connectionStatus === 'Connected' ? 'lightgreen' : 'red', fontWeight: 'bold' }}>{connectionStatus}</span></p>
           <p style={{ margin: '2px 0' }}><strong>Server:</strong> {socketUrl}</p>
           {connectionStatus !== 'Connected' && (
             <p style={{ color: 'orange', fontSize: '11px', marginTop: '5px' }}>
-              Codespaces Note: Ensure Port 3001 is <strong>PUBLIC</strong> in Ports tab.
+              Network Note: Ensure Port 3001 is mapped/public if remote.
             </p>
           )}
         </div>
@@ -243,18 +314,46 @@ function App() {
     );
   }
 
+  if (gameState === 'PLAYING') console.log("[CLIENT] Rendering PLAYING state. ServerState:", !!serverState);
+
   if (!serverState) return <div>Loading Game...</div>;
 
-  const { hands, scores, round, activePlayerIndex, feedback, winningStreak, powerModePlayer, revealed } = serverState;
+  const { hands, scores, round, activePlayerIndex, feedback, winningStreak, powerModePlayer, revealed, playerNames, droppedPlayers, stealState } = serverState;
+
+  // Hooks moved to top
+  // const [stealTarget... etc] were here
+  // useEffect was here
+
+  const handleStealSubmit = () => {
+    if (stealTarget !== null && stealSelection.length === 2 && roomId) {
+      setIsTransferring(true);
+      // Wait for animation then emit
+      setTimeout(() => {
+        socket.emit('steal_move', {
+          roomId,
+          targetIndex: stealTarget,
+          cardIndices: stealSelection
+        });
+        setIsTransferring(false);
+      }, 1000); // 1s animation
+    }
+  };
+
+  // Use names if available, else fallback
+  const getPlayerName = (idx) => {
+    if (playerNames && playerNames[idx]) return playerNames[idx];
+    return `P${idx + 1}`;
+  };
 
   return (
     <div className={`game-board`}>
+      <button className="drop-btn" onClick={dropGame}>Drop Game ❌</button>
       <header>
-        <div className="info">Room: {roomId} | Round: {round} | Turn: P{activePlayerIndex + 1}</div>
+        <div className="info">Room: {roomId} | Round: {round} | Turn: {getPlayerName(activePlayerIndex)}</div>
         <div className="scores">
           {scores.map((s, i) => (
             <span key={i} className={i === activePlayerIndex ? 'active-score' : ''}>
-              P{i + 1}: {s} {winningStreak[i] >= 3 ? '🔥' : ''}
+              {getPlayerName(i)}: {s} {winningStreak[i] >= 3 ? '🔥' : ''} {droppedPlayers && droppedPlayers[i] ? '(Left)' : ''}
             </span>
           ))}
         </div>
@@ -271,15 +370,16 @@ function App() {
         </div>
 
         {hands.map((hand, index) => {
-          if (hand.length === 0) return null; // Or show empty slot?
+          if (hand.length === 0 && (!droppedPlayers || !droppedPlayers[index])) return null; // Show empty if dropped? Or hide?
+          // If dropped, maybe show a "Dropped" placeholder or just nothing.
+          if (droppedPlayers && droppedPlayers[index]) return null;
 
-          const posClass = getPositionClass(index, hands.length); // Assuming standard 4 slots or dynamic?
-          // Hands length is constant usually (e.g. 2 or 4) if initialized.
-          // But if players drop, we might need robust count.
+          const isStealer = stealState?.active && stealState.stealer === index;
+          const posClass = getPositionClass(index, hands.length);
 
           return (
-            <div key={index} className={`player-position ${posClass}`}>
-              <div className="player-label">P{index + 1} ({hand.length})</div>
+            <div key={index} className={`player-position ${posClass} ${isStealer ? 'stealer-active' : ''}`}>
+              <div className="player-label">{getPlayerName(index)} ({hand.length})</div>
               <Card
                 player={hand[0]}
                 isVisible={revealed || (index === activePlayerIndex) || (index === myIndex)} // Show my card always? Usually yes.
@@ -298,7 +398,86 @@ function App() {
           );
         })}
       </div>
-    </div>
+      {/* Steal Mode Overlay */}
+      {stealState?.active && stealState.stealer === myIndex && (
+        <div className="steal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column',
+          justifyContent: 'center', alignItems: 'center', color: 'white'
+        }}>
+          <h2 className="pulse-text">🔥 Steal Mode Active! 🔥</h2>
+          <p>Select a player and choose 2 cards to steal!</p>
+
+          {!stealTarget && (
+            <div className="target-selection" style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+              {hands.map((h, idx) => {
+                if (idx === myIndex || (droppedPlayers && droppedPlayers[idx]) || h.length === 0) return null;
+                return (
+                  <button key={idx} onClick={() => setStealTarget(idx)} style={{
+                    padding: '20px', background: '#d32f2f', color: 'white', border: '2px solid white', borderRadius: '10px', cursor: 'pointer'
+                  }}>
+                    Steal from {getPlayerName(idx)} <br /> ({h.length} Cards)
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {stealTarget !== null && (
+            <div className="card-selection" style={{ textAlign: 'center' }}>
+              <h3>Stealing from {getPlayerName(stealTarget)}</h3>
+              <p>Select 2 Cards:</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '5px', maxWidth: '600px', margin: '20px auto' }}>
+                {hands[stealTarget].map((_, cIdx) => (
+                  <div key={cIdx}
+                    onClick={() => {
+                      if (stealSelection.includes(cIdx)) {
+                        setStealSelection(stealSelection.filter(id => id !== cIdx));
+                      } else {
+                        if (stealSelection.length < 2) setStealSelection([...stealSelection, cIdx]);
+                      }
+                    }}
+                    style={{
+                      width: '40px', height: '60px', background: stealSelection.includes(cIdx) ? '#ff5722' : '#555',
+                      border: '1px solid white', borderRadius: '4px', cursor: 'pointer',
+                      transform: stealSelection.includes(cIdx) ? 'scale(1.1)' : 'scale(1)'
+                    }}
+                  >
+                    <div style={{ width: '100%', height: '100%', background: `repeating-linear-gradient(45deg, #444, #444 5px, #555 5px, #555 10px)` }}></div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <button onClick={() => setStealTarget(null)} style={{ marginRight: '10px', background: '#777' }}>Back</button>
+                <button onClick={handleStealSubmit} disabled={stealSelection.length !== 2} className="primary-btn" style={{ background: 'gold', color: 'black', fontWeight: 'bold' }}>
+                  STEAL CARDS! 🥷
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {/* Animation Layer */}
+      {
+        isTransferring && (
+          <>
+            <div className="flying-card" style={{ top: '20%', left: '50%', animation: 'flyToBottom 1s forwards' }}></div>
+            <div className="flying-card" style={{ top: '20%', left: '55%', animation: 'flyToBottom 1s forwards 0.2s' }}></div>
+            {/* Simple CSS animation keyframe needs to be globally defined or here */}
+            <style>{`
+                @keyframes flyToBottom {
+                    0% { top: 20%; opacity: 1; transform: scale(1); }
+                    100% { top: 80%; opacity: 0; transform: scale(0.5); }
+                }
+            `}</style>
+          </>
+        )
+      }
+
+    </div >
   );
 }
 

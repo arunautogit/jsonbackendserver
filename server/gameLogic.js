@@ -42,7 +42,7 @@ export const playTurn = (activeCards, attribute) => {
     }
 };
 
-export const initializeGame = (playerCount) => {
+export const initializeGame = (playerCount, playerNames = []) => {
     const deck = shuffleDeck(playersData);
     const hands = distributeCards(deck, playerCount);
     return {
@@ -52,6 +52,8 @@ export const initializeGame = (playerCount) => {
         tiedPlayers: [],
         scores: new Array(playerCount).fill(0),
         winningStreak: new Array(playerCount).fill(0),
+        droppedPlayers: new Array(playerCount).fill(false), // [true, false, ...]
+        playerNames: playerNames, // Store names
         round: 1,
         gameState: 'PLAYING',
         revealed: false,
@@ -59,7 +61,8 @@ export const initializeGame = (playerCount) => {
         powerModePlayer: null,
         diceValue: 1,
         diceResult: null,
-        transferState: { active: false, from: null, to: null, count: 0 }
+        transferState: { active: false, from: null, to: null, count: 0 },
+        stealState: { active: false, stealer: null, count: 0 }
     };
 };
 
@@ -113,8 +116,9 @@ export const processNextTurn = (game) => {
 
         // Check for 3 wins Power Mode
         if (winningStreak[lastResult.winnerIndex] >= 3) {
-            game.feedback += " 🔥 Power Mode Active!";
+            game.feedback += " 🔥 Power Mode Active! Steal 2 Cards!";
             game.powerModePlayer = lastResult.winnerIndex;
+            game.stealState = { active: true, stealer: lastResult.winnerIndex, count: 2 };
         } else {
             game.powerModePlayer = null;
         }
@@ -148,4 +152,78 @@ export const getBestAttribute = (card) => {
         }
     }
     return bestAttr;
+};
+
+export const handlePlayerDrop = (game, playerIndex) => {
+    if (game.droppedPlayers[playerIndex]) return game;
+
+    game.droppedPlayers[playerIndex] = true;
+    const droppedHand = game.hands[playerIndex];
+    game.hands[playerIndex] = []; // Empty the hand
+
+    // Identify active players
+    const activeIndices = game.hands.map((_, i) => i)
+        .filter(i => !game.droppedPlayers[i] && i !== playerIndex); // Filter self just in case
+
+    if (activeIndices.length > 0) {
+        // Distribute round-robin
+        droppedHand.forEach((card, i) => {
+            const targetIndex = activeIndices[i % activeIndices.length];
+            game.hands[targetIndex].push(card);
+        });
+        game.feedback = `${game.playerNames[playerIndex] || `Player ${playerIndex + 1}`} dropped! Cards redistributed.`;
+    } else {
+        game.gameState = 'FINISHED';
+        game.feedback = 'All players dropped. Game Over.';
+    }
+
+    // If it was the dropped player's turn or they were the winner of last turn
+    // Ideally we should pass the turn if it was their turn.
+    // Simpler: Just ensure activePlayerIndex points to a valid player.
+
+    // If active player dropped, rotate to next valid
+    if (game.activePlayerIndex === playerIndex) {
+        let nextIndex = (playerIndex + 1) % game.hands.length;
+        while (game.droppedPlayers[nextIndex] && nextIndex !== playerIndex) {
+            nextIndex = (nextIndex + 1) % game.hands.length;
+        }
+        game.activePlayerIndex = nextIndex;
+    }
+
+    // Also clear them from streaks? Maybe keep history but valid for now.
+    return game;
+};
+
+export const handleStealMove = (game, { targetIndex, cardIndices }) => {
+    // Validate
+    if (!game.stealState || !game.stealState.active) return game;
+
+    // Note: cardIndices should be an array of indices to steal from target's hand
+    const { stealer } = game.stealState;
+    if (game.hands[targetIndex].length === 0) return game;
+
+    const targetHand = game.hands[targetIndex];
+    const stealerHand = game.hands[stealer];
+
+    // Sort indices descending to remove safely
+    const sortedIndices = [...cardIndices].sort((a, b) => b - a);
+
+    const stolenCards = [];
+    sortedIndices.forEach(idx => {
+        if (idx >= 0 && idx < targetHand.length) {
+            stolenCards.push(targetHand[idx]);
+            targetHand.splice(idx, 1);
+        }
+    });
+
+    stealerHand.push(...stolenCards);
+
+    // Reset State
+    game.stealState = { active: false, stealer: null, count: 0 };
+    // Reset streak after use? Usually power mode uses up the streak.
+    game.winningStreak[stealer] = 0;
+
+    game.feedback = `${game.playerNames[stealer] || `Player ${stealer + 1}`} stole ${stolenCards.length} cards from ${game.playerNames[targetIndex] || `Player ${targetIndex + 1}`}!`;
+
+    return game;
 };
