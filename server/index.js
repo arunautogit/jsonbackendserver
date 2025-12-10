@@ -2,11 +2,78 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import sqlite3 from 'sqlite3';
 import { createRoom, joinRoom, startGame, getRoom, leaveRoom, rooms, addCpu } from './roomManager.js';
 import { playTurn, processNextTurn, getBestAttribute, handlePlayerDrop, handleStealMove, activateSpyMode } from './gameLogic.js';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+// Database Setup
+const db = new sqlite3.Database('./users.db', (err) => {
+    if (err) console.error('DB Connect error:', err.message);
+    else {
+        console.log('Connected to SQLite DB.');
+        db.run(`CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT UNIQUE,
+            country TEXT,
+            coins INTEGER DEFAULT 0,
+            wins INTEGER DEFAULT 0
+        )`, () => {
+            // Migration for existing tables without coins
+            db.run("ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0", (err) => { });
+            db.run("ALTER TABLE users ADD COLUMN wins INTEGER DEFAULT 0", (err) => { });
+        });
+    }
+});
+
+// Auth Routes
+app.post('/api/register', (req, res) => {
+    const { name, email, country } = req.body;
+    if (!name || !email || !country) return res.status(400).json({ error: 'Missing fields' });
+
+    const stmt = db.prepare("INSERT INTO users (name, email, country) VALUES (?, ?, ?)");
+    stmt.run(name, email, country, function (err) {
+        if (err) {
+            if (err.message.includes('UNIQUE constraint failed')) {
+                return res.status(409).json({ error: 'Email already registered' });
+            }
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ id: this.lastID, name, email, country });
+    });
+    stmt.finalize();
+});
+
+app.post('/api/login', (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Missing email' });
+
+    db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'User not found' });
+        res.json(row);
+    });
+});
+
+app.post('/api/update_stats', (req, res) => {
+    const { email, coins, wins } = req.body; // coins to ADD, wins to ADD
+    db.run("UPDATE users SET coins = coins + ?, wins = wins + ? WHERE email = ?", [coins || 0, wins || 0, email], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
+app.post('/api/get_user', (req, res) => {
+    const { email } = req.body;
+    db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
+        if (err || !row) return res.status(404).json({ error: "User not found" });
+        res.json(row);
+    });
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {

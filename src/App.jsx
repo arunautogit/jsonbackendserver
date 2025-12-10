@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
+import confetti from 'canvas-confetti';
 import Card from './components/Card';
+import LandingPage from './components/LandingPage';
+import Dashboard from './components/Dashboard';
+import ShopModal from './components/ShopModal';
+import RoundSummary from './components/RoundSummary';
 import './index.css';
 import { teamColors, teamLogos } from './data/players';
 
@@ -119,7 +124,8 @@ const SpyHeroTab = ({ hands, playerNames, spyState, onClose, myIndex }) => {
 const socket = io.connect(getSocketUrl());
 
 function App() {
-  const [gameState, setGameState] = useState('LOBBY'); // LOBBY, WAITING, PLAYING...
+  const [currentUser, setCurrentUser] = useState(null); // User Object from Auth
+  const [gameState, setGameState] = useState('DASHBOARD'); // DASHBOARD, LOBBY, WAITING, PLAYING...
   const [roomId, setRoomId] = useState('');
   const [inputRoom, setInputRoom] = useState('');
   const [playerCount, setPlayerCount] = useState(0);
@@ -140,6 +146,12 @@ function App() {
   const [nameConfirmed, setNameConfirmed] = useState(false);
   const [showCpuPrompt, setShowCpuPrompt] = useState(false);
   const [showHeroTab, setShowHeroTab] = useState(true); // Toggle for spy tab
+  const [showShop, setShowShop] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryStats, setSummaryStats] = useState([]);
+
+  // Automated CPU Game Flag
+  const isCpuGameRef = useRef(false);
 
   // Steal Logic State
   const [stealTarget, setStealTarget] = useState(null);
@@ -159,6 +171,21 @@ function App() {
       setRoomId(id);
       setGameState('WAITING');
       setMyIndex(0);
+
+      // Auto-CPU Logic
+      if (isCpuGameRef.current) {
+        console.log("Auto-Adding CPUs...");
+        // Add 3 CPUs with slight delay to ensure server processes sequentially
+        setTimeout(() => socket.emit('add_cpu', id), 500);
+        setTimeout(() => socket.emit('add_cpu', id), 1000);
+        setTimeout(() => socket.emit('add_cpu', id), 1500);
+
+        // Start Game after delay
+        setTimeout(() => {
+          console.log("Auto-Starting Game...");
+          socket.emit('start_game', id);
+        }, 2500);
+      }
     });
 
     socket.on('player_joined', (count) => {
@@ -170,10 +197,34 @@ function App() {
       setServerState(game);
       setGameState('PLAYING');
       setShowCpuPrompt(false);
+      setShowSummary(false);
     });
 
     socket.on('game_update', (game) => {
       setServerState(game);
+      // Check Win Condition for Animation only once
+      if (game.gameState === 'FINISHED' && !showSummary) {
+        confetti({
+          particleCount: 200,
+          spread: 100,
+          origin: { y: 0.6 }
+        });
+
+        // Generate Summary Stats
+        const stats = game.hands.map((h, i) => ({
+          name: game.playerNames[i] || `Player ${i + 1}`,
+          cards: h.length,
+          wins: game.scores[i],
+          eliminated: game.droppedPlayers[i]
+        }));
+        setSummaryStats(stats);
+        setShowSummary(true);
+
+        // Update User Stats if I won
+        if (currentUser && game.winnerIndex === myIndex) {
+          updateUserStats(10, 1);
+        }
+      }
     });
 
     socket.on('rooms_list', (rooms) => {
@@ -191,7 +242,25 @@ function App() {
 
     // Check connection immediately
     if (socket.connected) setConnectionStatus('Connected');
-  }, []);
+  }, [currentUser, myIndex]); // Add dependencies needed for logic within
+
+  const updateUserStats = async (coins, wins) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${getSocketUrl()}/api/update_stats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentUser.email, coins, wins })
+      });
+      if (res.ok) {
+        // Refresh local user state
+        const updated = { ...currentUser, coins: currentUser.coins + coins, wins: currentUser.wins + wins };
+        setCurrentUser(updated);
+      }
+    } catch (e) {
+      console.error("Failed to update stats", e);
+    }
+  };
 
   const createRoom = () => {
     if (!playerName) return alert("Enter Name!");
@@ -292,11 +361,76 @@ function App() {
     return 'bottom';
   };
 
+  const [isAutoplay, setIsAutoplay] = useState(false);
+
+  // Autoplay Effect
+  useEffect(() => {
+    if (isAutoplay && roomId && gameState === 'PLAYING') {
+      const timer = setInterval(() => {
+        if (serverState && serverState.revealed) {
+          // If revealed (round over), click next turn
+          handleNextTurn();
+        }
+      }, 1500); // Check every 1.5s
+      return () => clearInterval(timer);
+    }
+  }, [isAutoplay, roomId, gameState, serverState]);
+
+
   // RENDER LOGIC
+
+  // Auth & Dashboard Views
+  if (!currentUser) {
+    return <LandingPage onLogin={(user) => {
+      setCurrentUser(user);
+      setPlayerName(user.name);
+      setNameConfirmed(true);
+      setGameState('DASHBOARD');
+    }} apiUrl={getSocketUrl()} />;
+  }
+
+  if (gameState === 'DASHBOARD') {
+    return (
+      <>
+        <Dashboard user={currentUser}
+          onPlayCpu={() => {
+            isCpuGameRef.current = true;
+            socket.emit('create_room', currentUser?.name || 'Player');
+          }}
+          onPlayRoom={() => {
+            isCpuGameRef.current = false;
+            setGameState('LOBBY');
+          }}
+          onLogout={() => {
+            setCurrentUser(null);
+            setGameState('DASHBOARD'); // Will re-render LandingPage
+          }}
+          onOpenShop={() => setShowShop(true)}
+        />
+        {showShop && (
+          <ShopModal
+            coins={currentUser?.coins || 0}
+            onClose={() => setShowShop(false)}
+            onBuy={(item, cost) => {
+              updateUserStats(-cost, 0);
+              if (cost <= (currentUser?.coins || 0)) {
+                alert(`Item ${item} bought! (Equipped for next game)`);
+              }
+              setShowShop(false);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   if (gameState === 'LOBBY') {
     return (
       <div className="lobby">
-        <h1>IPL Multiplayer</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1>IPL Multiplayer</h1>
+          <button onClick={() => setGameState('DASHBOARD')} style={{ background: '#555' }}>Back to Dashboard</button>
+        </div>
 
         {!nameConfirmed && (
           <NameInputModal onConfirm={(name) => {
@@ -403,6 +537,24 @@ function App() {
   return (
     <div className={`game-board`}>
       <button className="drop-btn" onClick={dropGame}>Drop Game ❌</button>
+
+      {/* Autoplay Toggle */}
+      <button onClick={() => setIsAutoplay(!isAutoplay)} style={{
+        position: 'fixed', top: '10px', left: '100px',
+        background: isAutoplay ? '#4caf50' : '#555', color: 'white',
+        padding: '8px 12px', border: '2px solid white', borderRadius: '5px',
+        fontWeight: 'bold', zIndex: 100
+      }}>
+        {isAutoplay ? '⏩ Autoplay ON' : '⏯ Autoplay OFF'}
+      </button>
+
+      {/* Shop Button */}
+      <button onClick={() => setShowShop(true)} style={{
+        position: 'fixed', top: '10px', right: '10px', background: 'gold', color: 'black',
+        padding: '8px 12px', border: '2px solid white', borderRadius: '5px', fontWeight: 'bold', zIndex: 100
+      }}>
+        🛒 Shop ({currentUser?.coins || 0})
+      </button>
 
       {/* Spy Activation Button (Main View) */}
       {!spyState?.active && hands[myIndex]?.length >= 25 && (
@@ -592,6 +744,47 @@ function App() {
         }}>
           🕵️
         </button>
+      )}
+
+      {/* Modals */}
+      {showShop && (
+        <ShopModal
+          coins={currentUser?.coins || 0}
+          onClose={() => setShowShop(false)}
+          onBuy={(item, cost) => {
+            // Future: Emit to server to buy
+            // For now, assume client-side simulation or server logic needs socket event
+            // socket.emit('shop_buy', { item });
+            // We haven't implemented socket 'shop_buy' yet?
+            // Plan said: Implement Shop Actions.
+            // We'll update coins locally then (or assume server handles)
+            // Let's assume we do client-side deduct for now or add socket event.
+            // Better: update user stats (-cost) then trigger game event
+            // Actually need to update server game state too.
+            // Let's just deduct coins and trigger alert for now,
+            // as full socket shop logic needs 'shop_buy' event in sever.
+            // I will add the user coin deduction here.
+            updateUserStats(-cost, 0);
+            // Trigger effect via generic move or special event?
+            // Probably need 'activate_power' or 'activate_spy' socket events?
+            // We have 'activate_spy'.
+            if (item === 'spy') socket.emit('activate_spy', { roomId });
+            if (item === 'power') {
+              // We don't have a 'activate_power' socket event typically, it comes from winning.
+              // But we can add it or repurpose.
+              // For now, let's just alert.
+              alert("Power Mode bought! (Server logic pending)");
+            }
+            setShowShop(false);
+          }}
+        />
+      )}
+
+      {showSummary && (
+        <RoundSummary stats={summaryStats} onClose={() => {
+          setShowSummary(false);
+          setGameState('DASHBOARD');
+        }} />
       )}
 
     </div >

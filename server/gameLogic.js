@@ -62,9 +62,55 @@ export const initializeGame = (playerCount, playerNames = []) => {
         diceValue: 1,
         diceResult: null,
         transferState: { active: false, from: null, to: null, count: 0 },
-        stealState: { active: false, stealer: null, count: 0 },
-        spyState: { active: false, makerIndex: null, cardId: null, holderIndex: null }
+        spyState: { active: false, makerIndex: null, cardId: null, holderIndex: null },
+        shopEffects: { powerMode: false } // Temporary flags
     };
+};
+
+export const checkElimination = (game) => {
+    game.hands.forEach((hand, idx) => {
+        if (!game.droppedPlayers[idx] && hand.length === 0) {
+            game.droppedPlayers[idx] = true;
+            game.feedback = `${game.playerNames[idx] || `Player ${idx + 1}`} has been ELIMINATED!`;
+        }
+    });
+};
+
+export const checkWinCondition = (game, totalCards = 80) => {
+    for (let i = 0; i < game.hands.length; i++) {
+        if (game.hands[i].length === totalCards) {
+            game.gameState = 'FINISHED';
+            game.winnerIndex = i;
+            game.feedback = `${game.playerNames[i] || `Player ${i + 1}`} WINS THE TOURNAMENT! 🏆`;
+            return true;
+        }
+    }
+    return false;
+};
+
+export const applyShopEffect = (game, playerIndex, item) => {
+    if (item === 'spy') {
+        // Activate spy mode regardless of card count
+        activateSpyMode(game, playerIndex);
+        game.feedback = `${game.playerNames[playerIndex] || `Player ${playerIndex + 1}`} bought Spy Mode!`;
+    } else if (item === 'power') {
+        // Instant Power Mode
+        game.winningStreak[playerIndex] = 3;
+        game.powerModePlayer = playerIndex;
+        game.stealState = { active: true, stealer: playerIndex, count: 2 };
+        game.feedback = `${game.playerNames[playerIndex]} bought Power Mode! Select cards to steal!`;
+        game.shopEffects.powerMode = true;
+    }
+    return game;
+};
+
+export const getRoundSummary = (game) => {
+    return game.hands.map((h, i) => ({
+        name: game.playerNames[i] || `Player ${i + 1}`,
+        cards: h.length,
+        wins: game.scores[i],
+        eliminated: game.droppedPlayers[i]
+    }));
 };
 
 const updateSpyHolder = (game) => {
@@ -162,8 +208,30 @@ export const processNextTurn = (game) => {
         updateSpyHolder(game);
     }
 
-    // Update Spy Holder Position
-    updateSpyHolder(game);
+    // Check Elimination
+    checkElimination(game);
+
+    // Check Win
+    checkWinCondition(game, 80); // Assuming 80 is total
+
+    // Update Active Player
+    // If current active player is elim, rotate
+    const totalPlayers = game.hands.length;
+    let nextIdx = (game.activePlayerIndex + 1) % totalPlayers;
+    // Skip eliminated/dropped players
+    let loopCount = 0;
+    while (game.droppedPlayers[nextIdx] && loopCount < totalPlayers) {
+        nextIdx = (nextIdx + 1) % totalPlayers;
+        loopCount++;
+    }
+
+    // If everyone else dropped, last man standing wins?
+    // checkWinCondition handles 80 cards. If logic is "Last Man Standing" it implies he gets all cards.
+    // If players drop, cards redistribute. So eventually one holds all.
+
+    if (loopCount < totalPlayers) {
+        game.activePlayerIndex = nextIdx;
+    }
 
     return game;
 };
